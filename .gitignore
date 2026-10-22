@@ -1,0 +1,6 @@
+# OS・同期ソフトが作るファイル
+desktop.ini
+Thumbs.db
+.DS_Store
+*.tmp
+~$*

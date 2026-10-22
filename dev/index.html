@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>お米のご注文｜株式会社農健</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hd">
+    <div class="hd-in">
+      <!-- 農健様のアイコン（同じ場所に置いた画像。外部読み込みをしない） -->
+      <img class="hd-icon" src="icon.png" alt="農健" width="40" height="40">
+      <div class="hd-txt">
+        <h1>お米のご注文</h1>
+        <p class="shop">株式会社農健</p>
+      </div>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- 読込中／読込失敗 -->
+    <p id="loading" class="state" role="status">読み込み中…</p>
+
+    <!-- 受付停止時 -->
+    <section id="stopped" class="notice" hidden>
+      <p id="stopMessage"></p>
+    </section>
+
+    <!-- 注文フォーム -->
+    <form id="orderForm" novalidate hidden>
+      <section class="sec">
+        <h2>ご注文の商品</h2>
+        <div id="items"></div>
+        <p id="err-items" class="err" hidden></p>
+        <button type="button" id="addItem" class="btn-add">＋ 商品を追加</button>
+        <p class="hint">1回のご注文で5品まで選べます。</p>
+        <!-- 送料の案内文：ご来店のときは出さない（設計書 §10-21 の68） -->
+        <p id="shippingNote" class="hint"></p>
+      </section>
+
+      <section class="sec">
+        <h2>お受け取り方法<span class="req">必須</span></h2>
+        <div class="choices" id="receiveBox">
+          <label class="choice"><input type="radio" name="receiveMethod" value="ご来店"><span>ご来店</span></label>
+          <label class="choice"><input type="radio" name="receiveMethod" value="発送"><span>発送</span></label>
+        </div>
+        <p id="err-receiveMethod" class="err" hidden></p>
+      </section>
+
+      <!-- ご希望日時：受取方法を選ぶと出る。見出しは ご来店＝受取日時／発送＝到着日時（設計書 §3.3 の 5-2） -->
+      <section class="sec" id="wishSec" hidden>
+        <h2><span id="wishTitle">受取日時</span><span class="req">必須</span></h2>
+        <label class="field">
+          <span class="lbl">日付</span>
+          <input type="date" id="wishDate">
+          <!-- 選べる最初の日と定休日（設計書 §10-21 の66） -->
+          <span id="rangeNote" class="hint"></span>
+          <span id="holidayNote" class="hint"></span>
+        </label>
+        <p id="err-wishDate" class="err" hidden></p>
+        <div class="field">
+          <span class="lbl">時間帯</span>
+          <div class="choices" id="wishTimeBox"></div>
+        </div>
+        <p id="err-wishTime" class="err" hidden></p>
+      </section>
+
+      <section class="sec">
+        <h2>お支払い方法<span class="req">必須</span></h2>
+        <!-- 選択肢は支払方法シートから、選んだ受取方法に合うものだけ出す（設計書 §3.3 の 6） -->
+        <div class="choices" id="payMethodBox"><span class="hint">お受け取り方法を選ぶと表示されます</span></div>
+        <p id="err-payMethod" class="err" hidden></p>
+      </section>
+
+      <section class="sec">
+        <h2>お客様情報</h2>
+        <label class="field">
+          <span class="lbl">お名前<span class="req">必須</span></span>
+          <input type="text" id="name" autocomplete="name" maxlength="100">
+        </label>
+        <p id="err-name" class="err" hidden></p>
+
+        <label class="field">
+          <span class="lbl">お電話番号<span class="req">必須</span></span>
+          <input type="tel" id="tel" autocomplete="tel" maxlength="30" inputmode="tel">
+        </label>
+        <p id="err-tel" class="err" hidden></p>
+
+        <label class="field">
+          <span class="lbl">メールアドレス<span class="opt">任意</span></span>
+          <input type="email" id="email" autocomplete="email" maxlength="200" inputmode="email">
+          <span class="hint">入力いただくと、ご注文の控えをお送りします。</span>
+        </label>
+
+        <!-- ご住所は発送のときだけ出す（必須）。ご来店では出さない -->
+        <div id="addrField" hidden>
+          <label class="field">
+            <span class="lbl">ご住所<span class="req">必須</span></span>
+            <textarea id="address" rows="2" autocomplete="street-address" maxlength="300"></textarea>
+          </label>
+          <p id="err-address" class="err" hidden></p>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>備考<span class="opt">任意</span></h2>
+        <textarea id="note" rows="3" maxlength="200" placeholder="ご要望などがあればご記入ください（200字まで）"></textarea>
+        <p class="hint right"><span id="noteCount">0</span>/200</p>
+        <p id="err-note" class="err" hidden></p>
+      </section>
+
+      <!-- 個人情報の取り扱いへの同意（設計書 §3.3 の 8-2）。送信ボタンの直前に置く。チェックするまで送信ボタンは押せない（v1.7） -->
+      <section class="sec" id="consentSec">
+        <h2>個人情報の取り扱い<span class="req">必須</span></h2>
+        <div class="consent-row" id="consentBox">
+          <label class="choice consent-check"><input type="checkbox" id="consent"><span>個人情報の<wbr>取り扱いに<wbr>同意する</span></label>
+          <button type="button" id="consentOpen" class="btn-view" aria-haspopup="dialog" aria-controls="consentPanel">内容を見る</button>
+        </div>
+        <p id="err-consent" class="err" hidden></p>
+      </section>
+
+      <!-- 画面下に固定：合計金額と送信ボタン -->
+      <div class="bar" id="bar">
+        <p id="err-submit" class="err" role="alert" hidden></p>
+        <div class="bar-row">
+          <div class="bar-total">
+            <span class="bar-lbl">合計金額</span>
+            <strong id="total">0円</strong>
+          </div>
+          <button type="submit" id="submitBtn" class="btn-main" disabled>注文を送信する</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- 完了表示 -->
+    <section id="done" class="done" hidden>
+      <h2>ご注文を受け付けました</h2>
+      <div class="receipt">
+        <p class="lbl">受付番号</p>
+        <strong id="doneNo"></strong>
+      </div>
+      <p id="doneMessage"></p>
+      <h3>ご注文内容（控え）</h3>
+      <div id="doneSummary"></div>
+      <div class="done-close">
+        <button type="button" id="closeBtn" class="btn-sub">閉じる</button>
+        <p id="closeHint" class="hint" role="status" hidden>画面右上の × で閉じてください</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- 同意文のパネル：画面内に開く。中身は設定の「個人情報同意文URL」で決まる（v1.7）
+       - URL あり：PDF を iframe に埋め込む（初めて開いたときに読み込む）。下に「別ウィンドウで開く」
+       - URL なし：設定の「個人情報同意文」の文章 -->
+  <div id="consentPanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="consentTitle" hidden>
+    <div class="panel-in">
+      <h2 id="consentTitle" class="panel-hd">個人情報の取り扱い</h2>
+      <div id="consentText" class="panel-body" tabindex="0"></div>
+      <div id="consentPdf" class="panel-body panel-pdf" hidden>
+        <p class="panel-loading">読み込み中…<br>表示されない場合は「別ウィンドウで開く」を押してください。</p>
+        <iframe id="consentFrame" title="個人情報の取り扱い（PDF）"></iframe>
+      </div>
+      <div class="panel-ft" id="consentFt">
+        <button type="button" id="consentClose" class="btn-sub">閉じる</button>
+        <a id="consentNewWin" class="btn-sub btn-link" href="#" target="_blank" rel="noopener" hidden>別ウィンドウで開く</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- config.js：API（GAS /exec）の URL。本番と dev/ で違うのはこのファイルだけ -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

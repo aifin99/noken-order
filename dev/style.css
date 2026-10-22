@@ -1,0 +1,187 @@
+/*
+ * 画面の方針（設計書 §3.3）
+ * - スマホ前提・1カラム。左右の余白16px、要素間12〜16px、本文・入力欄16px
+ * - タップ領域は高さ44px以上（ボタン・プルダウン・ラジオは48px）
+ * - 色は農健様のホームページに合わせる（2026-10-16）：
+ *   ページ背景=薄い黄緑 / カード・入力欄=白 / アクセント=緑 / 第2アクセント=黄（見出し1か所だけ）
+ *   文字=濃いグレー・補足=グレー / 区切り=薄い黄緑の線。エラーの赤は状態表示にだけ使う
+ * - 角丸はカード12px・ボタン24px
+ * - 影・グラデーション・装飾アイコン・Webフォント・外部CSSは使わない（フォントは端末標準）
+ */
+:root {
+  --page: #F0FCD5;        /* ページ背景：薄い黄緑 */
+  --card: #FFFFFF;        /* カード・入力欄の背景：白 */
+  --ink: #333333;         /* 文字 */
+  --muted: #6B6B6B;       /* 補足文字 */
+  --line: #D8F0A0;        /* 区切りの薄い枠線 */
+  --field-line: #B5D98A;  /* 入力欄・選択肢の枠（--line と --accent の中間。白地の上で見えるように） */
+  --accent: #90BF50;      /* アクセント：送信ボタンの地・選択中の枠 */
+  --accent-ink: #5E8F2A;  /* 緑を文字に使うときの濃い緑（「必須」）。設計書 §10-14 の45 */
+  --accent-tint: #F0FCD5; /* 選択中の背景（ページ背景と同じ色） */
+  --accent2: #FFD76C;     /* 第2アクセント：見出しの下線（1か所だけ） */
+  --err: #c62828;         /* エラー表示だけに使う */
+  --off: #D9D9D9;         /* 押せないボタンの地（グレー。v1.7：同意前の送信ボタン） */
+  --tap: 48px;            /* タップ領域の高さ（44px以上） */
+  --r-card: 12px;         /* カードの角丸 */
+  --r-btn: 24px;          /* ボタンの角丸 */
+  --r-field: 10px;        /* 入力欄・選択肢の角丸 */
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: 120px; background: var(--page); }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans JP", Meiryo, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+[hidden] { display: none !important; }
+h1, h2, h3, p { margin: 0; }
+
+/* ---------- 見出し（左にアイコン、右に「お米のご注文」。下線だけ第2アクセントの黄） ---------- */
+.hd { background: var(--card); border-bottom: 4px solid var(--accent2); }
+.hd-in { display: flex; align-items: center; gap: 12px; max-width: 560px; margin: 0 auto; padding: 12px 16px; }
+.hd-icon { display: block; flex: none; width: 40px; height: 40px; border-radius: 50%; }
+.hd-txt { min-width: 0; }
+.hd h1 { font-size: 22px; line-height: 1.3; }
+.hd .shop { font-size: 14px; color: var(--muted); line-height: 1.3; }
+
+main { max-width: 560px; margin: 0 auto; padding: 0 16px; }
+
+/* ---------- 状態表示 ---------- */
+.state { text-align: center; color: var(--muted); padding: 48px 0; }
+.state.is-error { color: var(--err); }
+.notice { margin: 16px 0; padding: 24px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); text-align: center; white-space: pre-wrap; }
+
+/* ---------- ブロック：白いカード ---------- */
+.sec { margin-top: 12px; padding: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
+form > .sec:first-child { margin-top: 16px; }
+.sec h2 { font-size: 18px; line-height: 1.4; margin-bottom: 12px; }
+.req, .opt { font-size: 14px; font-weight: normal; margin-left: 6px; }
+.req { color: var(--accent-ink); }
+.opt { color: var(--muted); }
+.hint { font-size: 14px; color: var(--muted); margin-top: 8px; display: block; }
+.right { text-align: right; }
+
+/* ---------- 入力欄 ---------- */
+select, input[type=text], input[type=tel], input[type=email], input[type=number], input[type=date], textarea {
+  display: block; width: 100%; max-width: 100%;
+  font: inherit; font-size: 16px; color: var(--ink);
+  background: var(--card); border: 1px solid var(--field-line); border-radius: var(--r-field);
+}
+select, input[type=text], input[type=tel], input[type=email], input[type=number], input[type=date] { height: var(--tap); padding: 0 12px; }
+/* 日付欄：iOS で高さ・左寄せが崩れないように */
+input[type=date] { -webkit-appearance: none; appearance: none; min-width: 0; line-height: var(--tap); text-align: left; }
+input[type=date]::-webkit-date-and-time-value { text-align: left; }
+textarea { padding: 12px; resize: vertical; min-height: var(--tap); }
+select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.field { display: block; margin-top: 16px; }
+h2 + .field { margin-top: 0; }
+.lbl { display: block; font-weight: bold; margin-bottom: 6px; }
+
+/* ---------- 選択肢（ラジオ）：2つ横並び、高さ48px ---------- */
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choices > .hint { grid-column: 1 / -1; margin: 0; min-height: var(--tap); display: flex; align-items: center; }
+/* 来店の時間帯だけ1列（全幅）。2列だとボタン内で折り返すため（v1.7。設計書 §10-22 の71(a)） */
+.choices.one-col { grid-template-columns: 1fr; }
+.choice {
+  display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 14px;
+  border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--card); cursor: pointer;
+}
+.choice input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--accent); }
+.choice.on, .choice:has(input:checked) { border: 2px solid var(--accent); padding: 0 13px; background: var(--accent-tint); font-weight: bold; }
+
+/* ---------- 明細カード（ブロックの中に1件ずつ。薄い黄緑の地に白い入力欄） ---------- */
+.item { background: var(--page); border: 1px solid var(--line); border-radius: var(--r-card); padding: 12px 12px 16px; margin-bottom: 12px; }
+.item-hd { display: flex; justify-content: space-between; align-items: center; }
+.item-hd .no { font-weight: bold; }
+.item .row { display: block; margin-top: 12px; }
+.item .row-lbl { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+.item .qty-amt { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.item .qty-other { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.item .qty-other input { flex: 1 1 auto; }
+.item .amt-col { text-align: right; }
+.item .amt { display: flex; align-items: center; justify-content: flex-end; min-height: var(--tap); font-size: 20px; }
+.item .choice.on, .item .choice:has(input:checked) { background: var(--card); }
+
+/* ---------- ボタン（角丸24px） ---------- */
+button { font: inherit; }
+.btn-main {
+  min-height: var(--tap); padding: 0 20px; font-size: 17px; font-weight: bold;
+  color: var(--ink); background: var(--accent); border: 0; border-radius: var(--r-btn); cursor: pointer;   /* 文字は #333 の太字（設計書 §10-14 の45） */
+}
+/* 押せない（同意のチェック前）：グレー。送信中は緑のまま薄くする（v1.7。設計書 §3.3 の 8-2） */
+.btn-main:disabled { background: var(--off); color: var(--muted); cursor: not-allowed; }
+.btn-main.is-sending:disabled { background: var(--accent); color: var(--ink); opacity: .55; cursor: wait; }
+.btn-add {
+  display: block; width: 100%; min-height: var(--tap); font-size: 16px; font-weight: bold;
+  color: var(--ink); background: var(--card); border: 1px dashed var(--accent); border-radius: var(--r-btn); cursor: pointer;
+}
+.btn-add:disabled { color: var(--muted); border-color: var(--line); cursor: default; font-weight: normal; }
+.btn-del {
+  min-height: 44px; min-width: 64px; padding: 0 14px; font-size: 16px;
+  color: var(--muted); background: var(--card); border: 1px solid var(--field-line); border-radius: var(--r-btn); cursor: pointer;
+}
+.btn-sub {
+  display: block; width: 100%; min-height: var(--tap); font-size: 16px; font-weight: bold;
+  color: var(--ink); background: var(--card); border: 2px solid var(--accent); border-radius: var(--r-btn); cursor: pointer;
+}
+
+/* ---------- 画面下に固定：合計＋送信ボタン ---------- */
+.bar {
+  position: -webkit-sticky; position: sticky; bottom: 0; z-index: 10;
+  margin: 16px -16px 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--card); border-top: 1px solid var(--line);
+}
+.bar-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bar-total { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.bar-lbl { font-size: 14px; color: var(--muted); }
+.bar-total strong { font-size: 22px; white-space: nowrap; }
+.bar .btn-main { flex: 0 0 auto; min-width: 52%; }
+.bar .err { margin: 0 0 8px; }
+
+/* ---------- エラー ---------- */
+.err { color: var(--err); font-size: 14px; margin-top: 6px; white-space: pre-wrap; }
+.invalid, select.invalid, input.invalid, textarea.invalid { border-color: var(--err) !important; }
+.choices.invalid .choice { border-color: var(--err); }
+
+/* ---------- 完了 ---------- */
+.done { margin: 16px 0 40px; padding: 20px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
+.done h2 { font-size: 20px; text-align: center; }
+.receipt { text-align: center; margin: 16px 0; padding: 16px; background: var(--page); border: 2px solid var(--accent); border-radius: var(--r-card); }
+.receipt .lbl { font-size: 14px; color: var(--muted); font-weight: normal; margin: 0; }
+.receipt strong { display: block; font-size: 34px; line-height: 1.3; letter-spacing: .04em; color: var(--ink); }
+.done h3 { font-size: 16px; margin: 24px 0 8px; }
+.sum-table { width: 100%; border-collapse: collapse; }
+.sum-table th, .sum-table td { border-bottom: 1px solid var(--line); padding: 10px 4px; text-align: left; vertical-align: top; word-break: break-all; }
+.sum-table th { width: 36%; color: var(--muted); font-weight: normal; font-size: 14px; }
+.sum-table td.num { text-align: right; white-space: nowrap; }
+.done-close { margin-top: 24px; }
+.done-close .hint { text-align: center; }
+
+/* ---------- 個人情報の同意（v1.6。設計書 §3.3 の 8-2） ---------- */
+/* チェックの横に「内容を見る」。幅375pxでは文言が2行に折り返す（語の途中で切らないよう <wbr> の位置だけで改行） */
+.consent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
+.consent-check { padding: 0 10px; gap: 8px; }
+.consent-check.on, .consent-check:has(input:checked) { padding: 0 9px; }
+.consent-check span { word-break: keep-all; overflow-wrap: anywhere; line-height: 1.4; padding: 6px 0; }
+.btn-view {
+  min-height: var(--tap); padding: 0 10px; font-size: 16px; font-weight: bold; white-space: nowrap;
+  color: var(--ink); background: var(--card); border: 2px solid var(--accent); border-radius: var(--r-btn); cursor: pointer;
+}
+.consent-row.invalid .choice { border-color: var(--err); }
+
+/* 同意文のパネル：画面いっぱいに重ねる。本文だけスクロールし、「閉じる」は常に下に見える */
+.panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 100; background: var(--page); }
+.panel-in { display: flex; flex-direction: column; max-width: 560px; height: 100%; margin: 0 auto; background: var(--card); }
+.panel-hd { flex: none; font-size: 18px; line-height: 1.4; padding: 14px 16px; border-bottom: 1px solid var(--line); }   /* 黄はヘッダーの1か所だけなので使わない */
+.panel-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; white-space: pre-wrap; word-break: break-all; }
+.panel-ft { flex: none; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+/* PDF 表示（v1.7）：本文の場所いっぱいに iframe。読み込むまでは下の文字が見える。下部は「閉じる」「別ウィンドウで開く」を横並び */
+.panel-pdf { position: relative; padding: 0; overflow: hidden; white-space: normal; }
+.panel-pdf iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; display: block; }
+.panel-loading { padding: 24px 16px; text-align: center; color: var(--muted); font-size: 14px; }
+.panel.is-pdf .panel-ft { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-link { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; line-height: 1.3; padding: 0 8px; }
+html.panel-open, html.panel-open body { overflow: hidden; }
