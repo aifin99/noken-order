@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>お米のご注文｜株式会社農健</title>
-  <link rel="stylesheet" href="style.css?v=1.10">
+  <link rel="stylesheet" href="style.css?v=1.11">
+  <!-- LINE（LIFF）の SDK。外部から読み込むのはこれだけ（LINE 公式の配信元）。読めなくてもフォームは動く -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
 </head>
 <body>
   <header class="hd">
@@ -77,6 +79,7 @@
         <label class="field">
           <span class="lbl">お名前<span class="req">必須</span></span>
           <input type="text" id="name" autocomplete="name" maxlength="100">
+          <span id="lineNameHint" class="hint" hidden>LINEの表示名を入れています。ご本名に直してください</span>
         </label>
         <p id="err-name" class="err" hidden></p>
 
@@ -128,7 +131,7 @@
             <span class="bar-lbl">合計金額</span>
             <strong id="total">0円</strong>
           </div>
-          <button type="submit" id="confirmBtn" class="btn-main" disabled>入力内容を確認する</button>
+          <button type="submit" id="confirmBtn" class="btn-main is-off" aria-disabled="true">入力内容を確認する</button>
         </div>
       </div>
     </form>
@@ -185,7 +188,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=1.10"></script>
-  <script src="app.js?v=1.10"></script>
+  <script src="config.js?v=1.11"></script>
+  <script src="app.js?v=1.11"></script>
 </body>
 </html>

@@ -39,6 +39,53 @@
     }).then(readJson);
   }
 
+  // ---------- LINE（LIFF） ----------
+  // config.js の liffId が空なら何もしない。空でなければ liff.init → LINE 内で開いたか LINE にログイン済みのときだけ
+  // IDトークンと表示名を取る。liff.login() は呼ばない（LINE の外で開いた人をログイン画面に飛ばさない）。
+  // SDK を読めない・init に失敗したときも「LINE なし」として従来どおり動く（画面には何も出さない）
+  var LIFF_ID = String((window.NOKEN_CONFIG && window.NOKEN_CONFIG.liffId) || '').trim();
+  var line = { inited: false, ready: false, name: '' };   // inited: init 成功／ready: IDトークンを取れる状態
+  var linePromise = null;
+
+  function warnLine(msg) { try { console.warn(msg); } catch (e) { /* console が無くてもよい */ } }
+
+  function initLine() {
+    if (!LIFF_ID) return Promise.resolve();
+    var lf = window.liff;
+    if (!lf || typeof lf.init !== 'function') { warnLine('LINE の SDK を読み込めませんでした。LINE なしで続けます。'); return Promise.resolve(); }
+    return Promise.resolve().then(function () { return lf.init({ liffId: LIFF_ID }); }).then(function () {
+      line.inited = true;
+      if (!(lf.isInClient() || lf.isLoggedIn())) return;   // LINE の外でログインしていない：ここで終わり
+      line.ready = true;
+      return Promise.resolve().then(function () { return lf.getProfile(); }).then(function (p) {
+        line.name = p && p.displayName ? String(p.displayName).trim() : '';
+        prefillName();
+      }, function () { warnLine('LINE の表示名を取得できませんでした。'); });
+    }).catch(function () {
+      line.ready = false;
+      warnLine('LINE の初期化に失敗しました。LINE なしで続けます。');
+    });
+  }
+  /** 送信するときの IDトークン。LINE なしなら '' */
+  function lineIdToken() {
+    if (!line.ready) return '';
+    try { return window.liff.getIDToken() || ''; } catch (e) { return ''; }
+  }
+  /** お名前が空なら LINE の表示名を入れ、「ご本名に直してください」の一文を出す */
+  function prefillName() {
+    if (!line.name || $('name').value.trim()) return;
+    $('name').value = line.name;
+    $('lineNameHint').hidden = false;
+  }
+  /** LINE の準備を待つ（最大 ms ミリ秒。待ちきれなければ LINE なしで送る） */
+  function waitLine(ms) {
+    if (!linePromise) return Promise.resolve();
+    return Promise.race([linePromise, new Promise(function (r) { setTimeout(r, ms); })]);
+  }
+  // SDK は defer で読むので、HTML を読み終えてから始める（読み込みに失敗していても先へ進む）
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { linePromise = initLine(); });
+  else linePromise = initLine();
+
   // ---------- 起動 ----------
   function loadFailed() {
     $('loading').textContent = '読み込みに失敗しました。時間をおいて開き直してください。';
@@ -134,6 +181,7 @@
   function onConfirm(ev) {
     ev.preventDefault();
     if (page !== 'input') return;
+    if (!$('consent').checked) { flashConsent(); return; }   // グレーのボタンを押したとき：同意欄へ
     if (!validate()) return;
     inputScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
     renderConfirm();
@@ -166,11 +214,30 @@
     showInput();
   }
 
-  /** ① の［入力内容を確認する］は同意のチェックが入るまで押せない。未チェックのあいだはバーに案内を出す */
+  /**
+   * ① の［入力内容を確認する］は同意のチェックが入るまでグレー。未チェックのあいだはバーに案内を出す。
+   * disabled にはせず見た目だけグレーにする（押されたら同意欄までスクロールして枠を強調する）
+   */
   function updateInputBtn() {
     var ok = $('consent').checked;
-    $('confirmBtn').disabled = !ok;
+    $('confirmBtn').classList.toggle('is-off', !ok);
+    $('confirmBtn').setAttribute('aria-disabled', ok ? 'false' : 'true');
     $('consentHint').hidden = ok;
+  }
+
+  /** 同意欄までスクロールし、枠を一瞬強調する */
+  var flashTimer = null;
+  function flashConsent() {
+    var sec = $('consentSec');
+    var reduce = false;
+    try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* 判定できなければ動かす */ }
+    try { sec.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' }); } catch (e) { sec.scrollIntoView(); }
+    sec.classList.remove('flash');
+    void sec.offsetWidth;   // 続けて押されたときもアニメーションをやり直す
+    sec.classList.add('flash');
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { sec.classList.remove('flash'); }, 1600);
+    try { $('consent').focus({ preventScroll: true }); } catch (e) { /* フォーカスできなくてもよい */ }
   }
 
   /** ② の［申し込む］はいつでも押せる（同意は ① で済んでいる）。送信中は［戻る］［申し込む］とも押せない */
@@ -535,7 +602,7 @@
     if (!$('tel').value.trim()) { showErr('tel', '電話番号を入力してください。'); ok = false; }
     if (rv === SHIP && !$('address').value.trim()) { showErr('address', '発送の場合はご住所を入力してください。'); ok = false; }
     if ($('note').value.length > 200) { showErr('note', '備考は200字までです。'); ok = false; }
-    // 同意前はボタンが押せないので通常は出ない（念のため）
+    // 同意前は onConfirm で同意欄へ移るので、通常は出ない（念のため）
     if (!$('consent').checked) { showErr('consent', '同意が必要です。'); ok = false; }
     if (!ok) {
       showErr('submit', '入力内容をご確認ください（赤字の箇所）。');
@@ -571,7 +638,12 @@
     };
 
     setSending(true);
-    apiPost(payload).then(function (res) {
+    // LINE の準備がまだなら少しだけ待つ。IDトークンが取れたときだけ lineIdToken を付ける（LINE なしは項目ごと付けない）
+    waitLine(3000).then(function () {
+      var tok = lineIdToken();
+      if (tok) payload.lineIdToken = tok;
+      return apiPost(payload);
+    }).then(function (res) {
       if (res && res.ok) { showDone(res); return; }
       setSending(false);
       showErr('send', (res && res.message) || '送信できませんでした。');
@@ -598,7 +670,8 @@
   }
 
   // ---------- 完了ページの「閉じる」 ----------
-  // window.close() を試し、閉じられなければ案内文を出す。
+  // LINE（LIFF）の中なら liff.closeWindow() で閉じる。
+  // それ以外は window.close() を試し、閉じられなければ案内文を出す。
   // LINE 内ブラウザや、URL を直接開いたタブはスクリプトから閉じられないので、多くの環境で案内文が出る。
   var CLOSE_CHECK_MS = 400;
 
@@ -610,6 +683,11 @@
 
   $('closeBtn').addEventListener('click', function () {
     $('closeHint').hidden = true;
+    if (line.inited) {
+      try {
+        if (window.liff.isInClient()) { window.liff.closeWindow(); return; }
+      } catch (e) { warnLine('LINE の画面を閉じられませんでした。'); }
+    }
     try { window.close(); } catch (e) { /* 閉じられない環境 */ }
     try { if (window.top && window.top !== window) window.top.close(); } catch (e) { /* 同上 */ }
     setTimeout(function () {

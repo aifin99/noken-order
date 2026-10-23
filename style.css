@@ -106,8 +106,8 @@ button { font: inherit; }
   min-height: var(--tap); padding: 0 20px; font-size: 17px; font-weight: bold;
   color: var(--ink); background: var(--accent); border: 0; border-radius: var(--r-btn); cursor: pointer;
 }
-/* 押せない（同意のチェック前）：グレー。送信中は緑のまま薄くする */
-.btn-main:disabled { background: var(--off); color: var(--muted); cursor: not-allowed; }
+/* 押せない（同意のチェック前）：グレー。①の確認ボタンは押せるが見た目だけグレー（.is-off）。送信中は緑のまま薄くする */
+.btn-main:disabled, .btn-main.is-off { background: var(--off); color: var(--muted); cursor: not-allowed; }
 .btn-main.is-sending:disabled { background: var(--accent); color: var(--ink); opacity: .55; cursor: wait; }
 .btn-add {
   display: block; width: 100%; min-height: var(--tap); font-size: 16px; font-weight: bold;
@@ -177,6 +177,12 @@ button { font: inherit; }
   color: var(--ink); background: var(--card); border: 2px solid var(--accent); border-radius: var(--r-btn); cursor: pointer;
 }
 .consent-row.invalid .choice { border-color: var(--err); }
+/* グレーの［入力内容を確認する］を押したとき：同意欄の枠を一瞬強調する（緑の太枠が消えていく） */
+.sec.flash { animation: noken-flash 1.5s ease-out; }
+@keyframes noken-flash {
+  0%, 45% { border-color: var(--accent); outline: 3px solid var(--accent); outline-offset: 0; }
+  100% { outline: 3px solid rgba(144, 191, 80, 0); outline-offset: 0; }
+}
 /* 確認ページの「同意済み」の行：右に「内容を見る」（文字のリンク。タップ領域は高さ44px） */
 .consent-done { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .btn-textlink {
