@@ -16,10 +16,10 @@
     });
   };
 
-  // ---------- API（GAS の /exec。URL は config.js の window.NOKEN_CONFIG.apiUrl） ----------
-  // GET ?api=master でマスタ、POST（本文は JSON 文字列）で注文。
-  // Content-Type を text/plain にするのは、application/json だとブラウザが事前確認（preflight）を送り、GAS が応えられないため。
-  // GAS は応答を 302 で別の URL に転送するので redirect: 'follow' で追う。
+  // ---------- API（URL は config.js の window.NOKEN_CONFIG.apiUrl） ----------
+  // GET ?api=master で商品などの情報、POST（本文は JSON 文字列）で注文。
+  // Content-Type を text/plain にするのは、application/json だとブラウザが事前確認（preflight）を送り、API が応えられないため。
+  // API は応答を 302 で別の URL に転送するので redirect: 'follow' で追う。
   var API_URL = (window.NOKEN_CONFIG && window.NOKEN_CONFIG.apiUrl) || '';
 
   function readJson(res) {
@@ -63,19 +63,18 @@
     $('shippingNote').textContent = m.shippingNote;
     updateShippingNote();
     $('holidayNote').textContent = m.holidayNote || '';
-    $('rangeNote').hidden = true;
-    // 同意文：URL があれば PDF をパネルに埋め込む（v1.7）。無ければ文章（改行はそのまま：textContent ＋ CSS の pre-wrap）
-    setupConsentPanel(m);
     $('holidayNote').hidden = !m.holidayNote;
-    $('orderForm').hidden = false;
+    $('rangeNote').hidden = true;
+    setupConsentPanel(m);
     addItem();
+    showPage('input');
 
     $('addItem').addEventListener('click', addItem);
-    $('orderForm').addEventListener('submit', onSubmit);
+    $('orderForm').addEventListener('submit', onConfirm);
     Array.prototype.forEach.call(document.querySelectorAll('input[name=receiveMethod]'), function (r) {
       r.addEventListener('change', function () { onReceiveChange(); clearErr('receiveMethod'); });
     });
-    // 日付：選んだ時点で制約（最短日・定休日）を確かめ、だめなら赤字で示す
+    // 日付：選んだ時点で条件（最短日・定休日など）を確かめ、だめなら赤字で示す
     $('wishDate').addEventListener('change', function () { checkWishDate(true); });
     $('wishDate').addEventListener('input', function () { clearErr('wishDate'); });
     // 時間帯・支払方法のボタンは受取方法ごとに作り直すので、まとめて受ける
@@ -85,26 +84,147 @@
       $(id).addEventListener('input', function () { clearErr(id); });
     });
     $('note').addEventListener('input', function () { $('noteCount').textContent = $('note').value.length; });
-    // 個人情報の同意（設計書 §3.3 の 8-2）。チェックするまで送信ボタンは押せない（v1.7）
-    $('consent').addEventListener('change', function () {
-      $('consent').parentNode.classList.toggle('on', $('consent').checked);
-      if ($('consent').checked) clearErr('consent');
-      updateSubmitBtn();
-    });
-    updateSubmitBtn();
-    $('consentOpen').addEventListener('click', openConsent);
-    $('consentClose').addEventListener('click', closeConsent);
-    document.addEventListener('keydown', function (ev) {
-      if ((ev.key === 'Escape' || ev.key === 'Esc') && !$('consentPanel').hidden) closeConsent();
-    });
-    // 選択中の強調（:has() が使えない古い内蔵ブラウザ向けに class でも付ける）
+    // 選択中の強調（:has() が使えない古いブラウザ向けに class でも付ける）
     $('orderForm').addEventListener('change', function (ev) {
       if (ev.target && ev.target.type === 'radio') syncChoice(ev.target.name);
     });
+
+    // 確認ページ：同意のチェックが入るまで［申し込む］は押せない
+    $('consent').addEventListener('change', function () {
+      $('consent').parentNode.classList.toggle('on', $('consent').checked);
+      if ($('consent').checked) clearErr('consent');
+      updateConfirmBtns();
+    });
+    updateConfirmBtns();
+    $('backBtn').addEventListener('click', backToInput);
+    $('sendBtn').addEventListener('click', onSend);
+    $('consentOpen').addEventListener('click', openConsent);
+    $('consentClose').addEventListener('click', function () { closeConsent(true); });
+    document.addEventListener('keydown', function (ev) {
+      if ((ev.key === 'Escape' || ev.key === 'Esc') && !$('consentPanel').hidden) closeConsent(true);
+    });
+    window.addEventListener('popstate', onPopState);
   }
 
-  // ---------- 同意文のパネル（画面内に開く） ----------
-  // 設定の「個人情報同意文URL」があれば PDF（サーバーで https:// だけ受け付け、ドライブの共有リンクは /preview に変換済み）
+  // ---------- ページの切り替え（① 入力 → ② 確認 → ③ 完了） ----------
+  // URL は変えずに表示を切り替える。② に入るときに履歴を1段積み、ブラウザの「戻る」で ① に戻れるようにする
+  var page = '';
+  var pushed = false;        // ② の履歴を積んでいるか
+  var inputScrollY = 0;      // ① のスクロール位置（戻ったときに元の場所へ）
+
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch (e) { /* 使えなくてもよい */ }
+
+  function showPage(p) {
+    page = p;
+    $('orderForm').hidden = p !== 'input';
+    $('confirm').hidden = p !== 'confirm';
+    $('done').hidden = p !== 'done';
+    $('steps').hidden = false;
+    Array.prototype.forEach.call($('steps').querySelectorAll('[data-step]'), function (s) {
+      var cur = s.getAttribute('data-step') === p;
+      s.classList.toggle('cur', cur);
+      if (cur) s.setAttribute('aria-current', 'step'); else s.removeAttribute('aria-current');
+    });
+  }
+
+  /** ① の［入力内容を確認する］：必須のチェックが通れば ② へ */
+  function onConfirm(ev) {
+    ev.preventDefault();
+    if (page !== 'input') return;
+    if (!validate()) return;
+    inputScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    renderConfirm();
+    setConsent(false);
+    clearErr('consent');
+    clearErr('send');
+    showPage('confirm');
+    window.scrollTo(0, 0);
+    try { history.pushState({ noken: 'confirm' }, ''); pushed = true; } catch (e) { pushed = false; }
+  }
+
+  /** ② の［戻る］：履歴を積んでいればブラウザの「戻る」と同じ動きにする（popstate で ① を出す） */
+  function backToInput() {
+    if (sending || page !== 'confirm') return;
+    if (pushed) { history.back(); return; }
+    showInput();
+  }
+
+  function showInput() {
+    pushed = false;
+    closeConsent(false);
+    setConsent(false);   // 戻ったら同意はもう一度チェックしてもらう
+    showPage('input');
+    window.scrollTo(0, inputScrollY);
+  }
+
+  function onPopState() {
+    if (page !== 'confirm') return;            // ① ではそのままページを離れる。③ は表示を変えない
+    if (sending) {                             // 送信中は ② に留まる（積み直す）
+      try { history.pushState({ noken: 'confirm' }, ''); } catch (e) { /* 積めなくても ② のまま */ }
+      return;
+    }
+    showInput();
+  }
+
+  function setConsent(on) {
+    $('consent').checked = on;
+    $('consent').parentNode.classList.toggle('on', on);
+    updateConfirmBtns();
+  }
+
+  /** ［申し込む］は同意のチェックが入るまで押せない。送信中は［戻る］［申し込む］とも押せない */
+  function updateConfirmBtns() {
+    $('sendBtn').disabled = sending || !$('consent').checked;
+    $('backBtn').disabled = sending;
+  }
+
+  // ---------- 確認ページの一覧 ----------
+  function receiveLabel(rv) { return (master.receive && master.receive[rv] && master.receive[rv].label) || '希望日時'; }
+  function payLabel(rv, value) {
+    var list = master.payMethods || [];
+    for (var i = 0; i < list.length; i++) if (list[i].receive === rv && list[i].value === value) return list[i].label;
+    return value;
+  }
+
+  function renderConfirm() {
+    var total = 0;
+    var rows = Array.prototype.map.call($('items').children, function (div, i) {
+      var it = readItem(div);
+      var p = findProduct(it.productId);
+      var a = priceOf(it);
+      if (a != null) total += a;
+      return '<tr><td>' + (i + 1) + '. ' + esc(p ? p.name : '') + '<br>' + esc(it.finish) + '／' + esc(it.qty) + 'kg</td>' +
+        '<td class="num">' + (a == null ? '―' : yen(a)) + '</td></tr>';
+    }).join('');
+
+    var rv = receiveMethod();
+    var info = [
+      ['合計金額', yen(total), 'strong'],
+      ['お受け取り方法', rv],
+      [receiveLabel(rv), dateDisp($('wishDate').value) + ' ' + wishTime()],
+      ['お支払い方法', payLabel(rv, payMethod())],
+      ['お名前', $('name').value.trim()],
+      ['お電話番号', $('tel').value.trim()],
+      ['メールアドレス', $('email').value.trim() || '（なし）']
+    ];
+    if (rv === SHIP) info.push(['ご住所', $('address').value.trim(), 'pre']);   // 住所は発送のときだけ
+    info.push(['備考', $('note').value.trim() || '（なし）', 'pre']);
+
+    var infoHtml = info.map(function (r) {
+      var v = r[2] === 'strong' ? '<strong>' + esc(r[1]) + '</strong>' : esc(r[1]);
+      return '<tr><th>' + esc(r[0]) + '</th><td' + (r[2] === 'pre' ? ' class="pre"' : '') + '>' + v + '</td></tr>';
+    }).join('');
+    // 送料の案内文は発送のときだけ
+    var note = rv === SHIP && master.shippingNote ? '<p class="hint">' + esc(master.shippingNote) + '</p>' : '';
+
+    $('confirmSummary').innerHTML =
+      '<table class="sum-table">' + rows + '</table>' +
+      note +
+      '<table class="sum-table">' + infoHtml + '</table>';
+  }
+
+  // ---------- 個人情報の取り扱いのパネル（画面内に開く） ----------
+  // PDF の URL があれば埋め込み（ドライブの共有リンクは API 側で埋め込み用に変換済み）、無ければ文章
   var consentPdf = '';
 
   function setupConsentPanel(m) {
@@ -117,7 +237,7 @@
     if (pdf) {
       $('consentNewWin').href = m.consentOpenUrl || consentPdf;   // 埋め込めない環境の逃げ道（新しいタブ）
     } else {
-      $('consentText').textContent = m.consentText || '';
+      $('consentText').textContent = m.consentText || '';         // 改行はそのまま（CSS の pre-wrap）
     }
   }
 
@@ -129,13 +249,13 @@
     if (consentPdf && $('consentFrame').getAttribute('src') !== consentPdf) $('consentFrame').setAttribute('src', consentPdf);
     try { $('consentTitle').setAttribute('tabindex', '-1'); $('consentTitle').focus(); } catch (e) { /* フォーカスできなくてもよい */ }
   }
-  function closeConsent() {
+  function closeConsent(focusBack) {
     $('consentPanel').hidden = true;
     document.documentElement.classList.remove('panel-open');
-    try { $('consentOpen').focus(); } catch (e) { /* 同上 */ }
+    if (focusBack) { try { $('consentOpen').focus(); } catch (e) { /* 同上 */ } }
   }
 
-  /** 送料の案内文：ご来店のときは出さない（設計書 §10-21 の68）。受取方法が未選択・発送なら出す */
+  /** 送料の案内文：ご来店のときは出さない。受取方法が未選択・発送なら出す */
   function updateShippingNote() {
     $('shippingNote').hidden = !master.shippingNote || receiveMethod() === VISIT;
   }
@@ -253,12 +373,7 @@
     $('total').textContent = yen(total);
   }
 
-  /** 送信ボタン：同意のチェックが入るまで押せない（グレー）。送信中も押せない（v1.7。設計書 §3.3 の 8-2） */
-  function updateSubmitBtn() {
-    $('submitBtn').disabled = sending || !$('consent').checked;
-  }
-
-  // ---------- 受取方法・ご希望日時・支払方法（設計書 §3.3 の 5〜7） ----------
+  // ---------- 受取方法・ご希望日時・支払方法 ----------
   var SHIP = '発送';
   var VISIT = 'ご来店';
   var WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
@@ -274,7 +389,7 @@
     }).join('');
   }
 
-  /** 受取方法を切り替えたとき：見出し・日付の下限・時間帯・支払方法・住所欄を入れ替える。時間帯と支払方法はクリア */
+  /** 受取方法を切り替えたとき：見出し・日付の範囲・時間帯・支払方法・住所欄を入れ替える。時間帯と支払方法はクリア */
   function onReceiveChange() {
     var rv = receiveMethod();
     var opt = master.receive && master.receive[rv];
@@ -290,7 +405,7 @@
     updateShippingNote();
 
     $('wishTimeBox').innerHTML = choicesHtml('wishTime', opt.times.map(function (t) { return { value: t, label: t }; }));
-    // 来店の時間帯だけ1列（全幅）。発送は2列のまま（設計書 §10-22 の71(a)）
+    // 来店の時間帯だけ1列（全幅）。発送は2列
     $('wishTimeBox').classList.toggle('one-col', rv === VISIT);
     clearErr('wishTime');
 
@@ -308,7 +423,7 @@
   }
 
   function todayStr() {
-    if (master.today) return master.today;   // サーバー（Asia/Tokyo）の今日
+    if (master.today) return master.today;   // API が返す今日（日本時間）
     var d = new Date(), z = function (v) { return ('0' + v).slice(-2); };
     return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
   }
@@ -324,14 +439,14 @@
     return t.getUTCFullYear() + '-' + z(t.getUTCMonth() + 1) + '-' + z(t.getUTCDate());
   }
   function dateDisp(s) { var p = parseYmd(s); return p ? s.replace(/-/g, '/') + '（' + WEEKDAYS[p.w] + '）' : ''; }
-  /** 選べる最初の日：来店＝今日、発送＝今日＋発送最短日数 */
+  /** 選べる最初の日：来店＝今日、発送＝今日＋発送の最短日数 */
   function minDate(rv) { return addDays(todayStr(), (master.receive[rv] && master.receive[rv].minDays) || 0); }
-  /** 選べる最後の日：今日＋60日（サーバーの maxDate。設計書 §10-21 の69） */
+  /** 選べる最後の日：今日＋60日 */
   function maxDate() { return master.maxDate || addDays(todayStr(), 60); }
   function isClosedDay(s) { var p = parseYmd(s); return !!p && (master.closedDays || []).indexOf(p.w) >= 0; }
   /** 'yyyy-MM-dd' → '10月26日（月）' */
   function mdDisp(s) { var p = parseYmd(s); return p ? (p.t.getUTCMonth() + 1) + '月' + p.t.getUTCDate() + '日（' + WEEKDAYS[p.w] + '）' : ''; }
-  /** 日付欄の下の案内：「○月○日（曜）から選べます（定休日：日曜）」（設計書 §10-21 の66） */
+  /** 日付欄の下の案内：「○月○日（曜）から選べます（定休日：日曜）」 */
   function rangeNote(rv) {
     var s = minDate(rv), max = maxDate();
     while (s <= max && isClosedDay(s)) s = addDays(s, 1);     // 定休日なら次の日へ
@@ -340,7 +455,7 @@
     return head + (closed ? '（定休日：' + closed + '）' : '');
   }
 
-  /** 希望日のエラー文（問題なければ ''）。サーバー側（Order.gs の checkWishDate_）と同じ条件 */
+  /** 希望日のエラー文（問題なければ ''）。API 側でも同じ条件で確かめる */
   function wishDateError(rv, s) {
     var what = rv === SHIP ? '到着日' : '受取日';
     if (!s) return what + 'を選んでください。';
@@ -378,7 +493,7 @@
     if (el) el.classList.remove('invalid');
   }
   function clearAllErr() {
-    ['items', 'receiveMethod', 'wishDate', 'wishTime', 'payMethod', 'name', 'tel', 'address', 'note', 'consent', 'submit'].forEach(clearErr);
+    ['items', 'receiveMethod', 'wishDate', 'wishTime', 'payMethod', 'name', 'tel', 'address', 'note', 'submit'].forEach(clearErr);
     Array.prototype.forEach.call(document.querySelectorAll('.item .invalid'), function (el) { el.classList.remove('invalid'); });
     Array.prototype.forEach.call(document.querySelectorAll('.item-err'), function (el) { el.hidden = true; el.textContent = ''; });
   }
@@ -390,7 +505,7 @@
     p.hidden = false;
   }
 
-  /** 送信前のチェック。NG の項目を赤く示して false を返す */
+  /** ① の必須チェック（同意は ② で見る）。NG の項目を赤く示して false を返す */
   function validate() {
     clearAllErr();
     var ok = true;
@@ -417,20 +532,19 @@
     if (!$('tel').value.trim()) { showErr('tel', '電話番号を入力してください。'); ok = false; }
     if (rv === SHIP && !$('address').value.trim()) { showErr('address', '発送の場合はご住所を入力してください。'); ok = false; }
     if ($('note').value.length > 200) { showErr('note', '備考は200字までです。'); ok = false; }
-    if (!$('consent').checked) { showErr('consent', '同意が必要です。'); ok = false; }
     if (!ok) {
       showErr('submit', '入力内容をご確認ください（赤字の箇所）。');
-      var first = document.querySelector('.invalid, .err:not([hidden])');
+      var first = document.querySelector('#orderForm .invalid, #orderForm .err:not([hidden])');
       if (first && first.scrollIntoView) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
     return ok;
   }
 
-  // ---------- 送信 ----------
-  function onSubmit(ev) {
-    ev.preventDefault();
-    if (sending) return;
-    if (!validate()) return;
+  // ---------- 送信（② の［申し込む］） ----------
+  function onSend() {
+    if (sending || page !== 'confirm') return;
+    if (!$('consent').checked) { showErr('consent', '同意が必要です。'); return; }
+    clearErr('send');
 
     var payload = {
       api: 'order',
@@ -447,64 +561,39 @@
       email: $('email').value,
       address: receiveMethod() === SHIP ? $('address').value : '',   // ご来店では住所を送らない
       note: $('note').value,
-      consent: $('consent').checked === true   // 個人情報の取り扱いへの同意（サーバーでも確かめる）
+      consent: $('consent').checked === true   // 個人情報の取り扱いへの同意（API でも確かめる）
     };
 
     setSending(true);
     apiPost(payload).then(function (res) {
       if (res && res.ok) { showDone(res); return; }
       setSending(false);
-      showErr('submit', (res && res.message) || '送信できませんでした。');
+      showErr('send', (res && res.message) || '送信できませんでした。');
     }).catch(function () {
       setSending(false);
-      showErr('submit', '送信できませんでした。通信状況をご確認のうえ、もう一度お試しください。');
+      showErr('send', '送信できませんでした。通信状況をご確認のうえ、もう一度お試しください。');
     });
   }
 
   function setSending(on) {
     sending = on;
-    var b = $('submitBtn');
+    var b = $('sendBtn');
     b.classList.toggle('is-sending', on);
-    b.textContent = on ? '送信中…' : '注文を送信する';
-    updateSubmitBtn();   // 送信中は押せない。終わったら同意のチェックしだい
+    b.textContent = on ? '送信中…' : '申し込む';
+    updateConfirmBtns();
   }
 
-  /** 完了表示。金額はサーバーで計算した値を使う */
+  /** ③ 完了：受付番号だけを出す */
   function showDone(res) {
-    $('orderForm').hidden = true;
+    closeConsent(false);
     $('doneNo').textContent = res.receiptNo;
-    $('doneMessage').textContent = res.completeMessage;
-    var rows = res.items.map(function (it, i) {
-      return '<tr><td>' + (i + 1) + '. ' + esc(it.name) + '<br>' + esc(it.finish) + '／' + esc(it.qty) + 'kg</td><td class="num">' + yen(it.amount) + '</td></tr>';
-    }).join('');
-    var info = [
-      ['合計金額', yen(res.total)],
-      ['お受け取り方法', res.receiveMethod],
-      [res.wishLabel, res.wishDate + ' ' + res.wishTime],
-      ['お支払い方法', res.payLabel],
-      ['お名前', res.name],
-      ['電話番号', res.tel],
-      ['メール', res.email || '（なし）']
-    ];
-    if (res.receiveMethod === SHIP) info.push(['ご住所', res.address]);   // 住所は発送のときだけ
-    info = info.concat([
-      ['備考', res.note || '（なし）'],
-      ['受付日時', res.receivedAt]
-    ]).map(function (r) { return '<tr><th>' + esc(r[0]) + '</th><td>' + esc(r[1]) + '</td></tr>'; }).join('');
-    // 送料の案内文は発送のときだけ（ご来店では出さない）
-    var note = res.receiveMethod === SHIP && master.shippingNote ? '<p class="hint">' + esc(master.shippingNote) + '</p>' : '';
-    $('doneSummary').innerHTML =
-      '<table class="sum-table">' + rows + '</table>' +
-      note +
-      '<table class="sum-table">' + info + '</table>';
-    $('done').hidden = false;
+    showPage('done');
     window.scrollTo(0, 0);
   }
 
-  // ---------- 完了画面の「閉じる」 ----------
-  // window.close() を試し、閉じられなければ案内文を出す（設計書 §3.3 の10）。
-  // LINE 内ブラウザや、URL を直接開いたタブはスクリプトから閉じられない仕様なので、多くの環境で案内文が出る。
-  // 枠（iframe）の中で開かれた場合に備えて、外側のページ（window.top）にも close を試す。
+  // ---------- 完了ページの「閉じる」 ----------
+  // window.close() を試し、閉じられなければ案内文を出す。
+  // LINE 内ブラウザや、URL を直接開いたタブはスクリプトから閉じられないので、多くの環境で案内文が出る。
   var CLOSE_CHECK_MS = 400;
 
   function isClosed() {

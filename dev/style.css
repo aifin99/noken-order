@@ -1,12 +1,7 @@
 /*
- * 画面の方針（設計書 §3.3）
- * - スマホ前提・1カラム。左右の余白16px、要素間12〜16px、本文・入力欄16px
- * - タップ領域は高さ44px以上（ボタン・プルダウン・ラジオは48px）
- * - 色は農健様のホームページに合わせる（2026-10-16）：
- *   ページ背景=薄い黄緑 / カード・入力欄=白 / アクセント=緑 / 第2アクセント=黄（見出し1か所だけ）
- *   文字=濃いグレー・補足=グレー / 区切り=薄い黄緑の線。エラーの赤は状態表示にだけ使う
- * - 角丸はカード12px・ボタン24px
- * - 影・グラデーション・装飾アイコン・Webフォント・外部CSSは使わない（フォントは端末標準）
+ * お米のご注文フォーム
+ * - スマホ前提・1カラム。左右の余白16px、本文・入力欄16px、タップ領域は高さ44px以上
+ * - 影・グラデーション・Webフォント・外部CSSは使わない（フォントは端末標準）
  */
 :root {
   --page: #F0FCD5;        /* ページ背景：薄い黄緑 */
@@ -16,11 +11,11 @@
   --line: #D8F0A0;        /* 区切りの薄い枠線 */
   --field-line: #B5D98A;  /* 入力欄・選択肢の枠（--line と --accent の中間。白地の上で見えるように） */
   --accent: #90BF50;      /* アクセント：送信ボタンの地・選択中の枠 */
-  --accent-ink: #5E8F2A;  /* 緑を文字に使うときの濃い緑（「必須」）。設計書 §10-14 の45 */
+  --accent-ink: #5E8F2A;  /* 緑を文字に使うときの濃い緑（「必須」） */
   --accent-tint: #F0FCD5; /* 選択中の背景（ページ背景と同じ色） */
   --accent2: #FFD76C;     /* 第2アクセント：見出しの下線（1か所だけ） */
   --err: #c62828;         /* エラー表示だけに使う */
-  --off: #D9D9D9;         /* 押せないボタンの地（グレー。v1.7：同意前の送信ボタン） */
+  --off: #D9D9D9;         /* 押せないボタンの地（グレー） */
   --tap: 48px;            /* タップ領域の高さ（44px以上） */
   --r-card: 12px;         /* カードの角丸 */
   --r-btn: 24px;          /* ボタンの角丸 */
@@ -83,7 +78,7 @@ h2 + .field { margin-top: 0; }
 /* ---------- 選択肢（ラジオ）：2つ横並び、高さ48px ---------- */
 .choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .choices > .hint { grid-column: 1 / -1; margin: 0; min-height: var(--tap); display: flex; align-items: center; }
-/* 来店の時間帯だけ1列（全幅）。2列だとボタン内で折り返すため（v1.7。設計書 §10-22 の71(a)） */
+/* 1列（全幅）にするとき */
 .choices.one-col { grid-template-columns: 1fr; }
 .choice {
   display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 0 14px;
@@ -109,9 +104,9 @@ h2 + .field { margin-top: 0; }
 button { font: inherit; }
 .btn-main {
   min-height: var(--tap); padding: 0 20px; font-size: 17px; font-weight: bold;
-  color: var(--ink); background: var(--accent); border: 0; border-radius: var(--r-btn); cursor: pointer;   /* 文字は #333 の太字（設計書 §10-14 の45） */
+  color: var(--ink); background: var(--accent); border: 0; border-radius: var(--r-btn); cursor: pointer;
 }
-/* 押せない（同意のチェック前）：グレー。送信中は緑のまま薄くする（v1.7。設計書 §3.3 の 8-2） */
+/* 押せない（同意のチェック前）：グレー。送信中は緑のまま薄くする */
 .btn-main:disabled { background: var(--off); color: var(--muted); cursor: not-allowed; }
 .btn-main.is-sending:disabled { background: var(--accent); color: var(--ink); opacity: .55; cursor: wait; }
 .btn-add {
@@ -127,8 +122,13 @@ button { font: inherit; }
   display: block; width: 100%; min-height: var(--tap); font-size: 16px; font-weight: bold;
   color: var(--ink); background: var(--card); border: 2px solid var(--accent); border-radius: var(--r-btn); cursor: pointer;
 }
+.btn-sub:disabled { color: var(--muted); border-color: var(--line); cursor: not-allowed; }
 
-/* ---------- 画面下に固定：合計＋送信ボタン ---------- */
+/* ---------- 手順の表示（入力 › 確認 › 完了。いまのページだけ太字） ---------- */
+.steps { margin-top: 12px; font-size: 14px; }
+.steps .cur { font-weight: bold; }
+
+/* ---------- 画面下に固定（入力：合計＋確認ボタン／確認：戻る＋申し込む） ---------- */
 .bar {
   position: -webkit-sticky; position: sticky; bottom: 0; z-index: 10;
   margin: 16px -16px 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
@@ -140,27 +140,31 @@ button { font: inherit; }
 .bar-total strong { font-size: 22px; white-space: nowrap; }
 .bar .btn-main { flex: 0 0 auto; min-width: 52%; }
 .bar .err { margin: 0 0 8px; }
+.bar-btns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; }
+.bar-btns .btn-main { width: 100%; }
 
 /* ---------- エラー ---------- */
 .err { color: var(--err); font-size: 14px; margin-top: 6px; white-space: pre-wrap; }
 .invalid, select.invalid, input.invalid, textarea.invalid { border-color: var(--err) !important; }
 .choices.invalid .choice { border-color: var(--err); }
 
-/* ---------- 完了 ---------- */
+/* ---------- 確認・完了 ---------- */
+#confirm > .sec:first-child { margin-top: 16px; }
 .done { margin: 16px 0 40px; padding: 20px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
 .done h2 { font-size: 20px; text-align: center; }
 .receipt { text-align: center; margin: 16px 0; padding: 16px; background: var(--page); border: 2px solid var(--accent); border-radius: var(--r-card); }
 .receipt .lbl { font-size: 14px; color: var(--muted); font-weight: normal; margin: 0; }
 .receipt strong { display: block; font-size: 34px; line-height: 1.3; letter-spacing: .04em; color: var(--ink); }
-.done h3 { font-size: 16px; margin: 24px 0 8px; }
 .sum-table { width: 100%; border-collapse: collapse; }
 .sum-table th, .sum-table td { border-bottom: 1px solid var(--line); padding: 10px 4px; text-align: left; vertical-align: top; word-break: break-all; }
 .sum-table th { width: 36%; color: var(--muted); font-weight: normal; font-size: 14px; }
 .sum-table td.num { text-align: right; white-space: nowrap; }
+.sum-table td.pre { white-space: pre-wrap; }
+.sum-table + .hint { margin-bottom: 8px; }
 .done-close { margin-top: 24px; }
 .done-close .hint { text-align: center; }
 
-/* ---------- 個人情報の同意（v1.6。設計書 §3.3 の 8-2） ---------- */
+/* ---------- 個人情報の取り扱いへの同意 ---------- */
 /* チェックの横に「内容を見る」。幅375pxでは文言が2行に折り返す（語の途中で切らないよう <wbr> の位置だけで改行） */
 .consent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: stretch; }
 .consent-check { padding: 0 10px; gap: 8px; }
@@ -178,7 +182,7 @@ button { font: inherit; }
 .panel-hd { flex: none; font-size: 18px; line-height: 1.4; padding: 14px 16px; border-bottom: 1px solid var(--line); }   /* 黄はヘッダーの1か所だけなので使わない */
 .panel-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px; white-space: pre-wrap; word-break: break-all; }
 .panel-ft { flex: none; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
-/* PDF 表示（v1.7）：本文の場所いっぱいに iframe。読み込むまでは下の文字が見える。下部は「閉じる」「別ウィンドウで開く」を横並び */
+/* PDF 表示：本文の場所いっぱいに iframe。読み込むまでは下の文字が見える。下部は「閉じる」「別ウィンドウで開く」を横並び */
 .panel-pdf { position: relative; padding: 0; overflow: hidden; white-space: normal; }
 .panel-pdf iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; display: block; }
 .panel-loading { padding: 24px 16px; text-align: center; color: var(--muted); font-size: 14px; }
