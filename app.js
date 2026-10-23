@@ -89,16 +89,19 @@
       if (ev.target && ev.target.type === 'radio') syncChoice(ev.target.name);
     });
 
-    // 確認ページ：同意のチェックが入るまで［申し込む］は押せない
+    // 入力ページ：同意のチェックが入るまで［入力内容を確認する］は押せない
     $('consent').addEventListener('change', function () {
       $('consent').parentNode.classList.toggle('on', $('consent').checked);
       if ($('consent').checked) clearErr('consent');
-      updateConfirmBtns();
+      updateInputBtn();
     });
+    updateInputBtn();
     updateConfirmBtns();
     $('backBtn').addEventListener('click', backToInput);
     $('sendBtn').addEventListener('click', onSend);
-    $('consentOpen').addEventListener('click', openConsent);
+    // 「内容を見る」は ① の同意欄と ② の「同意済み」の行の2か所。同じパネルを開く
+    $('consentOpen').addEventListener('click', function () { openConsent(this); });
+    $('consentOpen2').addEventListener('click', function () { openConsent(this); });
     $('consentClose').addEventListener('click', function () { closeConsent(true); });
     document.addEventListener('keydown', function (ev) {
       if ((ev.key === 'Escape' || ev.key === 'Esc') && !$('consentPanel').hidden) closeConsent(true);
@@ -134,8 +137,6 @@
     if (!validate()) return;
     inputScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
     renderConfirm();
-    setConsent(false);
-    clearErr('consent');
     clearErr('send');
     showPage('confirm');
     window.scrollTo(0, 0);
@@ -152,8 +153,7 @@
   function showInput() {
     pushed = false;
     closeConsent(false);
-    setConsent(false);   // 戻ったら同意はもう一度チェックしてもらう
-    showPage('input');
+    showPage('input');   // 入力内容も同意のチェックもそのまま
     window.scrollTo(0, inputScrollY);
   }
 
@@ -166,15 +166,16 @@
     showInput();
   }
 
-  function setConsent(on) {
-    $('consent').checked = on;
-    $('consent').parentNode.classList.toggle('on', on);
-    updateConfirmBtns();
+  /** ① の［入力内容を確認する］は同意のチェックが入るまで押せない。未チェックのあいだはバーに案内を出す */
+  function updateInputBtn() {
+    var ok = $('consent').checked;
+    $('confirmBtn').disabled = !ok;
+    $('consentHint').hidden = ok;
   }
 
-  /** ［申し込む］は同意のチェックが入るまで押せない。送信中は［戻る］［申し込む］とも押せない */
+  /** ② の［申し込む］はいつでも押せる（同意は ① で済んでいる）。送信中は［戻る］［申し込む］とも押せない */
   function updateConfirmBtns() {
-    $('sendBtn').disabled = sending || !$('consent').checked;
+    $('sendBtn').disabled = sending;
     $('backBtn').disabled = sending;
   }
 
@@ -226,6 +227,7 @@
   // ---------- 個人情報の取り扱いのパネル（画面内に開く） ----------
   // PDF の URL があれば埋め込み（ドライブの共有リンクは API 側で埋め込み用に変換済み）、無ければ文章
   var consentPdf = '';
+  var consentOpener = null;   // パネルを閉じたらフォーカスを戻すボタン
 
   function setupConsentPanel(m) {
     consentPdf = m.consentEmbedUrl || '';
@@ -241,7 +243,8 @@
     }
   }
 
-  function openConsent() {
+  function openConsent(opener) {
+    consentOpener = opener || $('consentOpen');
     $('consentPanel').hidden = false;
     document.documentElement.classList.add('panel-open');
     $('consentText').scrollTop = 0;
@@ -252,7 +255,7 @@
   function closeConsent(focusBack) {
     $('consentPanel').hidden = true;
     document.documentElement.classList.remove('panel-open');
-    if (focusBack) { try { $('consentOpen').focus(); } catch (e) { /* 同上 */ } }
+    if (focusBack && consentOpener) { try { consentOpener.focus(); } catch (e) { /* 同上 */ } }
   }
 
   /** 送料の案内文：ご来店のときは出さない。受取方法が未選択・発送なら出す */
@@ -493,7 +496,7 @@
     if (el) el.classList.remove('invalid');
   }
   function clearAllErr() {
-    ['items', 'receiveMethod', 'wishDate', 'wishTime', 'payMethod', 'name', 'tel', 'address', 'note', 'submit'].forEach(clearErr);
+    ['items', 'receiveMethod', 'wishDate', 'wishTime', 'payMethod', 'name', 'tel', 'address', 'note', 'consent', 'submit'].forEach(clearErr);
     Array.prototype.forEach.call(document.querySelectorAll('.item .invalid'), function (el) { el.classList.remove('invalid'); });
     Array.prototype.forEach.call(document.querySelectorAll('.item-err'), function (el) { el.hidden = true; el.textContent = ''; });
   }
@@ -505,7 +508,7 @@
     p.hidden = false;
   }
 
-  /** ① の必須チェック（同意は ② で見る）。NG の項目を赤く示して false を返す */
+  /** ① の必須チェック。NG の項目を赤く示して false を返す */
   function validate() {
     clearAllErr();
     var ok = true;
@@ -532,6 +535,8 @@
     if (!$('tel').value.trim()) { showErr('tel', '電話番号を入力してください。'); ok = false; }
     if (rv === SHIP && !$('address').value.trim()) { showErr('address', '発送の場合はご住所を入力してください。'); ok = false; }
     if ($('note').value.length > 200) { showErr('note', '備考は200字までです。'); ok = false; }
+    // 同意前はボタンが押せないので通常は出ない（念のため）
+    if (!$('consent').checked) { showErr('consent', '同意が必要です。'); ok = false; }
     if (!ok) {
       showErr('submit', '入力内容をご確認ください（赤字の箇所）。');
       var first = document.querySelector('#orderForm .invalid, #orderForm .err:not([hidden])');
@@ -543,7 +548,8 @@
   // ---------- 送信（② の［申し込む］） ----------
   function onSend() {
     if (sending || page !== 'confirm') return;
-    if (!$('consent').checked) { showErr('consent', '同意が必要です。'); return; }
+    // 同意は ① で済んでいる（同意しないと ② に進めない）。念のため確かめる
+    if (!$('consent').checked) { showErr('send', '入力ページで個人情報の取り扱いに同意してください。'); return; }
     clearErr('send');
 
     var payload = {

@@ -140,6 +140,7 @@ button { font: inherit; }
 .bar-total strong { font-size: 22px; white-space: nowrap; }
 .bar .btn-main { flex: 0 0 auto; min-width: 52%; }
 .bar .err { margin: 0 0 8px; }
+.bar-hint { margin: 0 0 8px; font-size: 14px; color: var(--muted); }
 .bar-btns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 8px; }
 .bar-btns .btn-main { width: 100%; }
 
@@ -150,6 +151,7 @@ button { font: inherit; }
 
 /* ---------- 確認・完了 ---------- */
 #confirm > .sec:first-child { margin-top: 16px; }
+.lead { margin: -4px 0 8px; }
 .done { margin: 16px 0 40px; padding: 20px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); }
 .done h2 { font-size: 20px; text-align: center; }
 .receipt { text-align: center; margin: 16px 0; padding: 16px; background: var(--page); border: 2px solid var(--accent); border-radius: var(--r-card); }
@@ -175,6 +177,13 @@ button { font: inherit; }
   color: var(--ink); background: var(--card); border: 2px solid var(--accent); border-radius: var(--r-btn); cursor: pointer;
 }
 .consent-row.invalid .choice { border-color: var(--err); }
+/* 確認ページの「同意済み」の行：右に「内容を見る」（文字のリンク。タップ領域は高さ44px） */
+.consent-done { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.btn-textlink {
+  min-height: 44px; padding: 0 4px; font-size: 16px; font-weight: bold; white-space: nowrap;
+  color: var(--accent-ink); background: none; border: 0; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.sum-table td .consent-done { margin: -10px 0; }
 
 /* 同意文のパネル：画面いっぱいに重ねる。本文だけスクロールし、「閉じる」は常に下に見える */
 .panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 100; background: var(--page); }

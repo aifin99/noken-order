@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>お米のご注文｜株式会社農健</title>
-  <link rel="stylesheet" href="style.css?v=1.9">
+  <link rel="stylesheet" href="style.css?v=1.10">
 </head>
 <body>
   <header class="hd">
@@ -109,27 +109,7 @@
         <p id="err-note" class="err" hidden></p>
       </section>
 
-      <!-- 画面下に固定：合計金額と［入力内容を確認する］ -->
-      <div class="bar" id="bar">
-        <p id="err-submit" class="err" role="alert" hidden></p>
-        <div class="bar-row">
-          <div class="bar-total">
-            <span class="bar-lbl">合計金額</span>
-            <strong id="total">0円</strong>
-          </div>
-          <button type="submit" id="confirmBtn" class="btn-main">入力内容を確認する</button>
-        </div>
-      </div>
-    </form>
-
-    <!-- ② 確認 -->
-    <div id="confirm" hidden>
-      <section class="sec">
-        <h2>ご注文内容の確認</h2>
-        <div id="confirmSummary"></div>
-      </section>
-
-      <!-- 個人情報の取り扱いへの同意。チェックするまで［申し込む］は押せない -->
+      <!-- 個人情報の取り扱いへの同意。チェックするまで［入力内容を確認する］は押せない -->
       <section class="sec" id="consentSec">
         <h2>個人情報の取り扱い<span class="req">必須</span></h2>
         <div class="consent-row" id="consentBox">
@@ -139,12 +119,38 @@
         <p id="err-consent" class="err" hidden></p>
       </section>
 
+      <!-- 画面下に固定：合計金額と［入力内容を確認する］ -->
+      <div class="bar" id="bar">
+        <p id="err-submit" class="err" role="alert" hidden></p>
+        <p id="consentHint" class="bar-hint">同意すると次へ進めます</p>
+        <div class="bar-row">
+          <div class="bar-total">
+            <span class="bar-lbl">合計金額</span>
+            <strong id="total">0円</strong>
+          </div>
+          <button type="submit" id="confirmBtn" class="btn-main" disabled>入力内容を確認する</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- ② 確認 -->
+    <div id="confirm" hidden>
+      <section class="sec">
+        <h2>ご注文内容の確認</h2>
+        <p class="lead">内容をご確認ください</p>
+        <div id="confirmSummary"></div>
+        <!-- 同意は ① で済んでいる（同意しないと ② に進めない）ので、ここは表示だけ -->
+        <table class="sum-table">
+          <tr><th>個人情報の取り扱い</th><td><div class="consent-done"><span>同意済み</span><button type="button" id="consentOpen2" class="btn-textlink" aria-haspopup="dialog" aria-controls="consentPanel">内容を見る</button></div></td></tr>
+        </table>
+      </section>
+
       <!-- 画面下に固定：［戻る］［申し込む］ -->
       <div class="bar">
         <p id="err-send" class="err" role="alert" hidden></p>
         <div class="bar-btns">
           <button type="button" id="backBtn" class="btn-sub">戻る</button>
-          <button type="button" id="sendBtn" class="btn-main" disabled>申し込む</button>
+          <button type="button" id="sendBtn" class="btn-main">申し込む</button>
         </div>
       </div>
     </div>
@@ -179,7 +185,7 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
-  <script src="app.js?v=1.9"></script>
+  <script src="config.js?v=1.10"></script>
+  <script src="app.js?v=1.10"></script>
 </body>
 </html>
