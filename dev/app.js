@@ -118,9 +118,7 @@
 
     $('addItem').addEventListener('click', addItem);
     $('orderForm').addEventListener('submit', onConfirm);
-    Array.prototype.forEach.call(document.querySelectorAll('input[name=receiveMethod]'), function (r) {
-      r.addEventListener('change', function () { onReceiveChange(); clearErr('receiveMethod'); });
-    });
+    setupReceive();
     // 日付：選んだ時点で条件（最短日・定休日など）を確かめ、だめなら赤字で示す
     $('wishDate').addEventListener('change', function () { checkWishDate(true); });
     $('wishDate').addEventListener('input', function () { clearErr('wishDate'); });
@@ -202,6 +200,13 @@
     pushed = false;
     closeConsent(false);
     showPage('input');   // 入力内容も同意のチェックもそのまま
+    if (pendingDateErr) {
+      // 締切で断られたあと：日付欄に赤字を出し、そこへスクロールする（今日はもう選べない）
+      pendingDateErr = false;
+      checkWishDate(true);
+      try { $('wishSec').scrollIntoView({ block: 'start' }); } catch (e) { $('wishSec').scrollIntoView(); }
+      return;
+    }
     window.scrollTo(0, inputScrollY);
   }
 
@@ -459,6 +464,27 @@
     }).join('');
   }
 
+  /**
+   * 受取方法の選択肢を API の receiveMethods（設定の「受取方法」）から作る。
+   * 1つだけなら選択済みにして、選択肢の枠（お受け取り方法の欄）ごと出さない。②の「お受け取り方法」の行は残る。
+   * 発送が一覧に無ければ発送は選べないので、到着日時・発送の時間帯・住所欄は出ない
+   */
+  function setupReceive() {
+    var list = (master.receiveMethods && master.receiveMethods.length ? master.receiveMethods : [VISIT, SHIP])
+      .filter(function (rv) { return master.receive && master.receive[rv]; });
+    $('receiveBox').innerHTML = choicesHtml('receiveMethod', list.map(function (rv) { return { value: rv, label: rv }; }));
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=receiveMethod]'), function (r) {
+      r.addEventListener('change', function () { onReceiveChange(); clearErr('receiveMethod'); });
+    });
+    var single = list.length === 1;
+    $('receiveSec').hidden = single;
+    if (single) {
+      document.querySelector('input[name=receiveMethod]').checked = true;
+      syncChoice('receiveMethod');
+      onReceiveChange();
+    }
+  }
+
   /** 受取方法を切り替えたとき：見出し・日付の範囲・時間帯・支払方法・住所欄を入れ替える。時間帯と支払方法はクリア */
   function onReceiveChange() {
     var rv = receiveMethod();
@@ -468,10 +494,7 @@
 
     $('wishSec').hidden = false;
     $('wishTitle').textContent = opt.label;
-    $('wishDate').min = minDate(rv);
-    $('wishDate').max = maxDate();
-    $('rangeNote').textContent = rangeNote(rv);
-    $('rangeNote').hidden = false;
+    updateDateRange(rv);
     updateShippingNote();
 
     $('wishTimeBox').innerHTML = choicesHtml('wishTime', opt.times.map(function (t) { return { value: t, label: t }; }));
@@ -509,8 +532,40 @@
     return t.getUTCFullYear() + '-' + z(t.getUTCMonth() + 1) + '-' + z(t.getUTCDate());
   }
   function dateDisp(s) { var p = parseYmd(s); return p ? s.replace(/-/g, '/') + '（' + WEEKDAYS[p.w] + '）' : ''; }
-  /** 選べる最初の日：来店＝今日、発送＝今日＋発送の最短日数 */
-  function minDate(rv) { return addDays(todayStr(), (master.receive[rv] && master.receive[rv].minDays) || 0); }
+
+  // 当日受取の締切（ご来店だけ）。「いま」は端末の時計ではなく、API が返した now（日本時間）を使う
+  var CUTOFF_MSG = '本日の受付は終了しました。受取日を選び直してください';
+  var cutoffHit = false;        // 送信が締切で断られた（マスタ取得のあとに締切を跨いだ）。以後は今日を選べない扱い
+  var pendingDateErr = false;   // ① に戻ったら日付欄に赤字を出してそこへスクロールする
+  /** 締切を過ぎているか（締切が空なら過ぎない） */
+  function cutoffPassed() {
+    if (cutoffHit) return true;
+    var cut = master.sameDayCutoff || '';
+    var hm = /T(\d{2}:\d{2})/.exec(master.now || '');
+    return !!cut && !!hm && hm[1] >= cut;
+  }
+  /** 選べる最初の日（定休日は飛ばさない）：来店＝今日（締切後は明日）、発送＝今日＋発送の最短日数 */
+  function minDate(rv) {
+    if (rv === VISIT) return addDays(todayStr(), cutoffPassed() ? 1 : 0);
+    return addDays(todayStr(), (master.receive[rv] && master.receive[rv].minDays) || 0);
+  }
+  /** minDate から定休日を飛ばした最初の日（日付欄の min・案内に使う） */
+  function firstOpenDate(rv) {
+    var s = minDate(rv), max = maxDate();
+    while (s <= max && isClosedDay(s)) s = addDays(s, 1);
+    return s;
+  }
+  /** 日付欄の範囲と案内文を、いまの受取方法・締切で作り直す */
+  function updateDateRange(rv) {
+    $('wishDate').min = firstOpenDate(rv) <= maxDate() ? firstOpenDate(rv) : minDate(rv);
+    $('wishDate').max = maxDate();
+    $('rangeNote').textContent = rangeNote(rv);
+    $('rangeNote').hidden = false;
+    // ご来店で、締切のせいで今日を選べないときだけ「本日のご注文は {締切} まで受け付けています」
+    var showCut = rv === VISIT && !!master.sameDayCutoff && cutoffPassed() && !isClosedDay(todayStr());
+    $('cutoffNote').textContent = showCut ? '本日のご注文は ' + master.sameDayCutoff + ' まで受け付けています' : '';
+    $('cutoffNote').hidden = !showCut;
+  }
   /** 選べる最後の日：今日＋60日 */
   function maxDate() { return master.maxDate || addDays(todayStr(), 60); }
   function isClosedDay(s) { var p = parseYmd(s); return !!p && (master.closedDays || []).indexOf(p.w) >= 0; }
@@ -518,8 +573,7 @@
   function mdDisp(s) { var p = parseYmd(s); return p ? (p.t.getUTCMonth() + 1) + '月' + p.t.getUTCDate() + '日（' + WEEKDAYS[p.w] + '）' : ''; }
   /** 日付欄の下の案内：「○月○日（曜）から選べます（定休日：日曜）」 */
   function rangeNote(rv) {
-    var s = minDate(rv), max = maxDate();
-    while (s <= max && isClosedDay(s)) s = addDays(s, 1);     // 定休日なら次の日へ
+    var s = firstOpenDate(rv), max = maxDate();               // 定休日なら次の日へ
     var closed = (master.closedDays || []).map(function (w) { return WEEKDAYS[w] + '曜'; }).join('・');
     var head = s <= max ? mdDisp(s) + 'から選べます' : '現在お選びいただける日がありません';
     return head + (closed ? '（定休日：' + closed + '）' : '');
@@ -531,8 +585,13 @@
     if (!s) return what + 'を選んでください。';
     var p = parseYmd(s);
     if (!p) return what + 'を正しく選んでください。';
-    var min = minDate(rv);
-    if (s < min) return rv === SHIP ? what + 'は' + dateDisp(min) + '以降の日付をお選びください。' : what + 'は今日以降の日付をお選びください。';
+    if (rv === SHIP) {
+      var min = minDate(rv);
+      if (s < min) return what + 'は' + dateDisp(min) + '以降の日付をお選びください。';
+    } else {
+      if (s < todayStr()) return what + 'は今日以降の日付をお選びください。';
+      if (s === todayStr() && cutoffPassed()) return CUTOFF_MSG;   // 当日受取の締切後（API と同じ文）
+    }
     var max = maxDate();
     if (s > max) return what + 'は' + dateDisp(max) + 'までの日付をお選びください。';
     if ((master.closedDays || []).indexOf(p.w) >= 0) return WEEKDAYS[p.w] + '曜日は定休日のためお選びいただけません。';
@@ -646,7 +705,15 @@
     }).then(function (res) {
       if (res && res.ok) { showDone(res); return; }
       setSending(false);
-      showErr('send', (res && res.message) || '送信できませんでした。');
+      var msg = (res && res.message) || '送信できませんでした。';
+      if (msg.indexOf(CUTOFF_MSG) >= 0) {
+        // マスタ取得のあとに当日受取の締切を跨いだ：今日を選べない扱いにし、［戻る］で ① の日付欄へ（選び直せる）
+        cutoffHit = true;
+        pendingDateErr = true;
+        updateDateRange(receiveMethod());
+        msg = CUTOFF_MSG + '\n［戻る］を押すと受取日を選び直せます。';
+      }
+      showErr('send', msg);
     }).catch(function () {
       setSending(false);
       showErr('send', '送信できませんでした。通信状況をご確認のうえ、もう一度お試しください。');

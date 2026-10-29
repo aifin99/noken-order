@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>お米のご注文｜株式会社農健</title>
-  <link rel="stylesheet" href="style.css?v=1.11">
+  <link rel="stylesheet" href="style.css?v=1.12">
   <!-- LINE（LIFF）の SDK。外部から読み込むのはこれだけ（LINE 公式の配信元）。読めなくてもフォームは動く -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js" defer></script>
 </head>
@@ -43,12 +43,10 @@
         <p id="shippingNote" class="hint"></p>
       </section>
 
-      <section class="sec">
+      <!-- 選択肢は API の receiveMethods から作る。1つだけなら選択済みにしてこの枠ごと出さない -->
+      <section class="sec" id="receiveSec">
         <h2>お受け取り方法<span class="req">必須</span></h2>
-        <div class="choices" id="receiveBox">
-          <label class="choice"><input type="radio" name="receiveMethod" value="ご来店"><span>ご来店</span></label>
-          <label class="choice"><input type="radio" name="receiveMethod" value="発送"><span>発送</span></label>
-        </div>
+        <div class="choices" id="receiveBox"></div>
         <p id="err-receiveMethod" class="err" hidden></p>
       </section>
 
@@ -58,6 +56,7 @@
           <span class="lbl">日付</span>
           <input type="date" id="wishDate">
           <span id="rangeNote" class="hint"></span>
+          <span id="cutoffNote" class="hint" hidden></span>
           <span id="holidayNote" class="hint"></span>
         </label>
         <p id="err-wishDate" class="err" hidden></p>
@@ -188,7 +187,7 @@
     </div>
   </div>
 
-  <script src="config.js?v=1.11"></script>
-  <script src="app.js?v=1.11"></script>
+  <script src="config.js?v=1.12"></script>
+  <script src="app.js?v=1.12"></script>
 </body>
 </html>
