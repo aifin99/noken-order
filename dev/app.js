@@ -535,6 +535,8 @@
 
   // 当日受取の締切（ご来店だけ）。「いま」は端末の時計ではなく、API が返した now（日本時間）を使う
   var CUTOFF_MSG = '本日の受付は終了しました。受取日を選び直してください';
+  // v1.13：来店最短日数が 1 以上のときの、最短日より前の受取日・締切を跨いだ送信の文（API と同じ文）
+  var DEADLINE_MSG = '受付期限を過ぎています。受取日を選び直してください';
   var cutoffHit = false;        // 送信が締切で断られた（マスタ取得のあとに締切を跨いだ）。以後は今日を選べない扱い
   var pendingDateErr = false;   // ① に戻ったら日付欄に赤字を出してそこへスクロールする
   /** 締切を過ぎているか（締切が空なら過ぎない） */
@@ -544,9 +546,11 @@
     var hm = /T(\d{2}:\d{2})/.exec(master.now || '');
     return !!cut && !!hm && hm[1] >= cut;
   }
-  /** 選べる最初の日（定休日は飛ばさない）：来店＝今日（締切後は明日）、発送＝今日＋発送の最短日数 */
+  /** ご来店の最短日数（v1.13。API の visitMinDays。無い・不正なら 0＝当日から） */
+  function visitMinDays() { var n = Number(master.visitMinDays); return n >= 1 ? Math.floor(n) : 0; }
+  /** 選べる最初の日（定休日は飛ばさない）：来店＝今日＋来店最短日数（締切以降は＋1日）、発送＝今日＋発送の最短日数 */
   function minDate(rv) {
-    if (rv === VISIT) return addDays(todayStr(), cutoffPassed() ? 1 : 0);
+    if (rv === VISIT) return addDays(todayStr(), visitMinDays() + (cutoffPassed() ? 1 : 0));
     return addDays(todayStr(), (master.receive[rv] && master.receive[rv].minDays) || 0);
   }
   /** minDate から定休日を飛ばした最初の日（日付欄の min・案内に使う） */
@@ -561,8 +565,8 @@
     $('wishDate').max = maxDate();
     $('rangeNote').textContent = rangeNote(rv);
     $('rangeNote').hidden = false;
-    // ご来店で、締切のせいで今日を選べないときだけ「本日のご注文は {締切} まで受け付けています」
-    var showCut = rv === VISIT && !!master.sameDayCutoff && cutoffPassed() && !isClosedDay(todayStr());
+    // ご来店で、締切のせいで今日を選べないときだけ「本日のご注文は {締切} まで受け付けています」（来店最短日数=0 のときだけ。v1.13）
+    var showCut = rv === VISIT && visitMinDays() === 0 && !!master.sameDayCutoff && cutoffPassed() && !isClosedDay(todayStr());
     $('cutoffNote').textContent = showCut ? '本日のご注文は ' + master.sameDayCutoff + ' まで受け付けています' : '';
     $('cutoffNote').hidden = !showCut;
   }
@@ -574,6 +578,10 @@
   /** 日付欄の下の案内：「○月○日（曜）から選べます（定休日：日曜）」 */
   function rangeNote(rv) {
     var s = firstOpenDate(rv), max = maxDate();               // 定休日なら次の日へ
+    // v1.13：ご来店で来店最短日数が 1 以上（締切あり）なら「ご注文は受取日の前日 {締切} までに承ります。最短 ○月○日（曜）」
+    if (rv === VISIT && visitMinDays() >= 1 && master.sameDayCutoff && s <= max) {
+      return 'ご注文は受取日の前日 ' + master.sameDayCutoff + ' までに承ります。最短 ' + mdDisp(s);
+    }
     var closed = (master.closedDays || []).map(function (w) { return WEEKDAYS[w] + '曜'; }).join('・');
     var head = s <= max ? mdDisp(s) + 'から選べます' : '現在お選びいただける日がありません';
     return head + (closed ? '（定休日：' + closed + '）' : '');
@@ -588,6 +596,8 @@
     if (rv === SHIP) {
       var min = minDate(rv);
       if (s < min) return what + 'は' + dateDisp(min) + '以降の日付をお選びください。';
+    } else if (visitMinDays() >= 1) {
+      if (s < minDate(rv)) return DEADLINE_MSG;                  // v1.13（API と同じ文）
     } else {
       if (s < todayStr()) return what + 'は今日以降の日付をお選びください。';
       if (s === todayStr() && cutoffPassed()) return CUTOFF_MSG;   // 当日受取の締切後（API と同じ文）
@@ -706,12 +716,14 @@
       if (res && res.ok) { showDone(res); return; }
       setSending(false);
       var msg = (res && res.message) || '送信できませんでした。';
-      if (msg.indexOf(CUTOFF_MSG) >= 0) {
-        // マスタ取得のあとに当日受取の締切を跨いだ：今日を選べない扱いにし、［戻る］で ① の日付欄へ（選び直せる）
+      // v1.13：来店最短日数が 1 以上のときは DEADLINE_MSG で断られる（どちらも締切を跨いだ扱い）
+      var hitMsg = msg.indexOf(CUTOFF_MSG) >= 0 ? CUTOFF_MSG : msg.indexOf(DEADLINE_MSG) >= 0 ? DEADLINE_MSG : '';
+      if (hitMsg) {
+        // マスタ取得のあとに締切を跨いだ：締切を過ぎた扱いにし（最短日が1日進む）、［戻る］で ① の日付欄へ（選び直せる）
         cutoffHit = true;
         pendingDateErr = true;
         updateDateRange(receiveMethod());
-        msg = CUTOFF_MSG + '\n［戻る］を押すと受取日を選び直せます。';
+        msg = hitMsg + '\n［戻る］を押すと受取日を選び直せます。';
       }
       showErr('send', msg);
     }).catch(function () {
